@@ -1,7 +1,7 @@
 # 🍱 FoodBridge
 ### Real-Time Surplus Food Redistribution Platform
 
-> **Vashisht Hackathon 3.0 — EcoTech Track**  
+
 > Rescue Food. Feed Communities. Reduce Waste.
 
 ---
@@ -293,36 +293,9 @@ Launch FoodBridge from your home screen
 
 Alternatively, the web app is fully installable as a PWA — visit the live link on mobile and tap Add to Home Screen.
 
-## 📽️ Demo Video
 
-https://github.com/user-attachments/assets/8751e92d-845e-487c-aa5a-758e9726a9b7
 
-The demo covers:
-1. Registering as a Donor and posting a food listing with AI photo analysis
-2. The listing appearing as a live map pin in real time on a second browser tab
-3. Claiming the food as a Receiver and generating the WhatsApp contact link
-4. The impact dashboard updating with animated stats
 
----
-
-## 🏆 Judging Criteria Coverage
-
-| Criterion | Weight | How FoodBridge addresses it |
-|---|---|---|
-| Technical Implementation | 35% | Supabase Realtime WebSockets, AI vision API, haversine distance filtering, RLS policies, PWA service worker |
-| Innovation | 20% | AI food safety analysis, volunteer logistics role, public transparency report, gamification with levels and badges |
-| Feasibility | 20% | Fully deployed, works on any device, uses free-tier APIs, WhatsApp integration removes friction |
-| Video Presentation | 15% | Live two-tab realtime demo, local Chennai seed data, animated impact stats |
-| Deployment | 10% | Hosted on Vercel with public URL, installable as PWA on mobile |
-
----
-
-## 👥 Team
-
-Built during **Vashisht Hackathon 3.0** at IIITDM Kancheepuram (March 28–29, 2026).
-
-1.ANKIT NEGI
-2.PRINCE KUMAR
 
 ---
 
