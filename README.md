@@ -94,7 +94,7 @@ FoodBridge is fully installable on any device — tap **Add to Home Screen** on 
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/ankitnegi-dev/foodbridge.git
+git clone https://github.com/ankitnegi-dev/foodbridge.git](https://github.com/gokulrajmisox/foodbridge
 cd foodbridge
 ```
 
