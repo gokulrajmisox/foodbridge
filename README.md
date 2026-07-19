@@ -261,7 +261,7 @@ foodbridge/
 
 ## 🌐 Live Demo
 
-🔗 **[FoodBridge Web App](https://foodbridge-seven.vercel.app/)**
+🔗 **[FoodBridge Web App]([https://foodbridge-private-czz5.vercel.app/dashboard])**
 
 ---
 
