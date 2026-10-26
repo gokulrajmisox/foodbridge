@@ -136,6 +136,7 @@ create table if not exists food_listings (
   photo_url text, pickup_address text,
   lat numeric, lng numeric,
   status text default 'available',
+  is_emergency boolean default false,
   created_at timestamptz default now()
 );
 
@@ -145,7 +146,8 @@ create table if not exists claims (
   listing_id uuid references food_listings(id) on delete cascade,
   receiver_id uuid references profiles(id) on delete cascade,
   status text default 'pending',
-  created_at timestamptz default now()
+  created_at timestamptz default now(),
+  unique(receiver_id, listing_id)
 );
 
 -- ratings
@@ -161,11 +163,21 @@ create table if not exists ratings (
   unique(rater_id, listing_id)
 );
 
+-- notifications (used by the Navbar bell + the Claims "Ping Donor" button)
+create table if not exists notifications (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references profiles(id) on delete cascade,
+  message text,
+  is_read boolean default false,
+  created_at timestamptz default now()
+);
+
 -- Enable RLS
 alter table profiles enable row level security;
 alter table food_listings enable row level security;
 alter table claims enable row level security;
 alter table ratings enable row level security;
+alter table notifications enable row level security;
 
 -- Policies
 create policy "Users can insert own profile" on profiles for insert with check (auth.uid() = id);
@@ -176,16 +188,100 @@ create policy "Anyone logged in can view listings" on food_listings for select u
 create policy "Donors can insert listings" on food_listings for insert with check (auth.uid() = donor_id);
 create policy "Donors can update listings" on food_listings for update using (auth.uid() = donor_id);
 
-create policy "Receivers can insert claims" on claims for insert with check (auth.uid() = receiver_id);
+-- Claims: one claim per user per listing, never your own listing, only available listings.
+create policy "Receivers can insert claims" on claims for insert with check (
+  auth.uid() = receiver_id
+  and auth.uid() <> (select donor_id from food_listings where id = listing_id)
+  and (select status from food_listings where id = listing_id) = 'available'
+);
 create policy "Users can view own claims" on claims for select using (auth.uid() = receiver_id or auth.uid() = (select donor_id from food_listings where id = listing_id));
 
+-- Ratings: only the receiver of a COMPLETED claim can rate, and only that listing's donor.
 create policy "Anyone can read ratings" on ratings for select using (true);
-create policy "Users can insert ratings" on ratings for insert with check (auth.uid() = rater_id);
+create policy "Users can insert ratings" on ratings for insert with check (
+  auth.uid() = rater_id
+  and exists (
+    select 1 from claims c
+    join food_listings l on l.id = c.listing_id
+    where c.id = claim_id
+      and c.listing_id = listing_id
+      and c.receiver_id = auth.uid()
+      and c.status = 'completed'
+      and l.donor_id = ratee_id
+  )
+);
+
+-- Notifications: read / mark-read only your own; notify only a donor you claimed from.
+create policy "Users can read own notifications" on notifications for select using (auth.uid() = user_id);
+create policy "Users can mark own notifications read" on notifications for update using (auth.uid() = user_id);
+create policy "Claimants can notify donors" on notifications for insert with check (
+  exists (
+    select 1 from claims c
+    join food_listings l on l.id = c.listing_id
+    where c.receiver_id = auth.uid()
+      and l.donor_id = user_id
+  )
+);
 
 -- Enable Realtime
 alter publication supabase_realtime add table food_listings;
 alter publication supabase_realtime add table claims;
+alter publication supabase_realtime add table notifications;
 ```
+
+If you already ran the old setup SQL, apply this migration instead of re-running the block above (re-running `create policy` would fail on duplicate policy names):
+
+```sql
+-- Day 13 migration for existing setups
+alter table food_listings add column if not exists is_emergency boolean default false;
+
+create table if not exists notifications (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references profiles(id) on delete cascade,
+  message text,
+  is_read boolean default false,
+  created_at timestamptz default now()
+);
+alter table notifications enable row level security;
+alter publication supabase_realtime add table notifications;
+
+-- Replace the old claims/ratings insert policies with the tightened versions.
+-- First remove any duplicate claims, then add the uniqueness constraint:
+--   delete from claims a using claims b
+--   where a.receiver_id = b.receiver_id and a.listing_id = b.listing_id and a.id > b.id;
+--   alter table claims add constraint claims_receiver_listing_unique unique (receiver_id, listing_id);
+drop policy if exists "Receivers can insert claims" on claims;
+create policy "Receivers can insert claims" on claims for insert with check (
+  auth.uid() = receiver_id
+  and auth.uid() <> (select donor_id from food_listings where id = listing_id)
+  and (select status from food_listings where id = listing_id) = 'available'
+);
+drop policy if exists "Users can insert ratings" on ratings;
+create policy "Users can insert ratings" on ratings for insert with check (
+  auth.uid() = rater_id
+  and exists (
+    select 1 from claims c
+    join food_listings l on l.id = c.listing_id
+    where c.id = claim_id
+      and c.listing_id = listing_id
+      and c.receiver_id = auth.uid()
+      and c.status = 'completed'
+      and l.donor_id = ratee_id
+  )
+);
+create policy "Users can read own notifications" on notifications for select using (auth.uid() = user_id);
+create policy "Users can mark own notifications read" on notifications for update using (auth.uid() = user_id);
+create policy "Claimants can notify donors" on notifications for insert with check (
+  exists (
+    select 1 from claims c
+    join food_listings l on l.id = c.listing_id
+    where c.receiver_id = auth.uid()
+      and l.donor_id = user_id
+  )
+);
+```
+
+> **Day 13 security tightening (2026-10-26):** the setup SQL above now closes the self-rating loop found in the Day 12 audit — a rating can only be inserted by the receiver of a *completed* claim, and only for that listing's donor; claims can no longer target your own listing, duplicate an existing claim, or target a non-`available` listing. The previously undocumented `notifications` table (Navbar bell + "Ping Donor") and the `food_listings.is_emergency` column (Dashboard 🚨 badge) are now part of the setup. Behaviour change to know: the Claims page still shows the ⭐ Rate button on pending claims, but the insert will now be rejected by RLS until the claim is `completed` — hiding the button until completion is a UI follow-up, not done here. Deliberately NOT changed: profile reads stay own-row-only; the WhatsApp/leaderboard features that need donor profiles still conflict with that rule and need a scoped donor-contact view, not a blanket read widening.
 
 Also go to **Storage → New Bucket** → name it `food-photos` → set to **Public**.
 
